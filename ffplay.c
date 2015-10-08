@@ -451,12 +451,21 @@ static int packet_queue_put_nullpacket(PacketQueue *q, int stream_index)
 }
 
 /* packet queue handling */
-static void packet_queue_init(PacketQueue *q)
+static int packet_queue_init(PacketQueue *q)
 {
     memset(q, 0, sizeof(PacketQueue));
     q->mutex = SDL_CreateMutex();
+    if (!q->mutex) {
+        av_log(NULL, AV_LOG_FATAL, "SDL_CreateMutex(): %s\n", SDL_GetError());
+        return AVERROR(ENOMEM);
+    }
     q->cond = SDL_CreateCond();
+    if (!q->cond) {
+        av_log(NULL, AV_LOG_FATAL, "SDL_CreateCond(): %s\n", SDL_GetError());
+        return AVERROR(ENOMEM);
+    }
     q->abort_request = 1;
+    return 0;
 }
 
 static void packet_queue_flush(PacketQueue *q)
@@ -648,10 +657,14 @@ static int frame_queue_init(FrameQueue *f, PacketQueue *pktq, int max_size, int 
 {
     int i;
     memset(f, 0, sizeof(FrameQueue));
-    if (!(f->mutex = SDL_CreateMutex()))
+    if (!(f->mutex = SDL_CreateMutex())) {
+        av_log(NULL, AV_LOG_FATAL, "SDL_CreateMutex(): %s\n", SDL_GetError());
         return AVERROR(ENOMEM);
-    if (!(f->cond = SDL_CreateCond()))
+    }
+    if (!(f->cond = SDL_CreateCond())) {
+        av_log(NULL, AV_LOG_FATAL, "SDL_CreateCond(): %s\n", SDL_GetError());
         return AVERROR(ENOMEM);
+    }
     f->pktq = pktq;
     f->max_size = FFMIN(max_size, FRAME_QUEUE_SIZE);
     f->keep_last = !!keep_last;
@@ -2071,10 +2084,15 @@ static int audio_thread(void *arg)
     return ret;
 }
 
-static void decoder_start(Decoder *d, int (*fn)(void *), void *arg)
+static int decoder_start(Decoder *d, int (*fn)(void *), void *arg)
 {
     packet_queue_start(d->queue);
     d->decoder_tid = SDL_CreateThread(fn, arg);
+    if (!d->decoder_tid) {
+        av_log(NULL, AV_LOG_ERROR, "SDL_CreateThread(): %s\n", SDL_GetError());
+        return AVERROR(ENOMEM);
+    }
+    return 0;
 }
 
 static int video_thread(void *arg)
@@ -2672,7 +2690,8 @@ static int stream_component_open(VideoState *is, int stream_index)
             is->auddec.start_pts = is->audio_st->start_time;
             is->auddec.start_pts_tb = is->audio_st->time_base;
         }
-        decoder_start(&is->auddec, audio_thread, is);
+        if ((ret = decoder_start(&is->auddec, audio_thread, is)) < 0)
+            goto fail;
         SDL_PauseAudio(0);
         break;
     case AVMEDIA_TYPE_VIDEO:
@@ -2683,7 +2702,8 @@ static int stream_component_open(VideoState *is, int stream_index)
         is->viddec_height = avctx->height;
 
         decoder_init(&is->viddec, avctx, &is->videoq, is->continue_read_thread);
-        decoder_start(&is->viddec, video_thread, is);
+        if ((ret = decoder_start(&is->viddec, video_thread, is)) < 0)
+            goto fail;
         is->queue_attachments_req = 1;
         break;
     case AVMEDIA_TYPE_SUBTITLE:
@@ -2691,7 +2711,8 @@ static int stream_component_open(VideoState *is, int stream_index)
         is->subtitle_st = ic->streams[stream_index];
 
         decoder_init(&is->subdec, avctx, &is->subtitleq, is->continue_read_thread);
-        decoder_start(&is->subdec, subtitle_thread, is);
+        if ((ret = decoder_start(&is->subdec, subtitle_thread, is)) < 0)
+            goto fail;
         break;
     default:
         break;
@@ -2799,6 +2820,12 @@ static int read_thread(void *arg)
     SDL_mutex *wait_mutex = SDL_CreateMutex();
     int scan_all_pmts_set = 0;
     int64_t pkt_ts;
+
+    if (!wait_mutex) {
+        av_log(NULL, AV_LOG_FATAL, "SDL_CreateMutex(): %s\n", SDL_GetError());
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
     memset(st_index, -1, sizeof(st_index));
     is->last_video_stream = is->video_stream = -1;
@@ -3136,11 +3163,15 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
     if (frame_queue_init(&is->sampq, &is->audioq, SAMPLE_QUEUE_SIZE, 1) < 0)
         goto fail;
 
-    packet_queue_init(&is->videoq);
-    packet_queue_init(&is->audioq);
-    packet_queue_init(&is->subtitleq);
+    if (packet_queue_init(&is->videoq) < 0 ||
+        packet_queue_init(&is->audioq) < 0 ||
+        packet_queue_init(&is->subtitleq) < 0)
+        goto fail;
 
-    is->continue_read_thread = SDL_CreateCond();
+    if (!(is->continue_read_thread = SDL_CreateCond())) {
+        av_log(NULL, AV_LOG_FATAL, "SDL_CreateCond(): %s\n", SDL_GetError());
+        goto fail;
+    }
 
     init_clock(&is->vidclk, &is->videoq.serial);
     init_clock(&is->audclk, &is->audioq.serial);
@@ -3151,6 +3182,7 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
     is->av_sync_type = av_sync_type;
     is->read_tid     = SDL_CreateThread(read_thread, is);
     if (!is->read_tid) {
+        av_log(NULL, AV_LOG_FATAL, "SDL_CreateThread(): %s\n", SDL_GetError());
 fail:
         stream_close(is);
         return NULL;
@@ -3702,8 +3734,10 @@ static int lockmgr(void **mtx, enum AVLockOp op)
    switch(op) {
       case AV_LOCK_CREATE:
           *mtx = SDL_CreateMutex();
-          if(!*mtx)
+          if(!*mtx) {
+              av_log(NULL, AV_LOG_FATAL, "SDL_CreateMutex(): %s\n", SDL_GetError());
               return 1;
+          }
           return 0;
       case AV_LOCK_OBTAIN:
           return !!SDL_LockMutex(*mtx);

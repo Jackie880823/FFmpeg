@@ -23,21 +23,9 @@
 #include "libavutil/opt.h"
 #include "avfilter.h"
 #include "formats.h"
-#include "framesync.h"
 #include "internal.h"
 #include "video.h"
-
-typedef struct MaskedMergeContext {
-    const AVClass *class;
-    int width[4], height[4];
-    int nb_planes;
-    int planes;
-    int max, half, depth;
-    FFFrameSync fs;
-
-    void (*maskedmerge)(struct MaskedMergeContext *s, const AVFrame *base,
-                        const AVFrame *overlay, const AVFrame *mask, AVFrame *out);
-} MaskedMergeContext;
+#include "maskedmerge.h"
 
 #define OFFSET(x) offsetof(MaskedMergeContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
@@ -92,78 +80,76 @@ static int process_frame(FFFrameSync *fs)
         if (!out)
             return AVERROR(ENOMEM);
     } else {
+        int p;
+
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!out)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, base);
 
-        s->maskedmerge(s, base, overlay, mask, out);
+        for (p = 0; p < s->nb_planes; p++) {
+            if (!((1 << p) & s->planes)) {
+                av_image_copy_plane(out->data[p], out->linesize[p], base->data[p], base->linesize[p],
+                                    s->width[p], s->height[p]);
+                continue;
+            }
+
+            s->maskedmerge(base->data[p], overlay->data[p],
+                           mask->data[p], out->data[p],
+                           base->linesize[p], overlay->linesize[p],
+                           mask->linesize[p], out->linesize[p],
+                           s->width[p], s->height[p],
+                           s->half, s->depth);
+        }
     }
     out->pts = av_rescale_q(base->pts, s->fs.time_base, outlink->time_base);
 
     return ff_filter_frame(outlink, out);
 }
 
-static void maskedmerge8(MaskedMergeContext *s, const AVFrame *base,
-                         const AVFrame *overlay, const AVFrame *mask, AVFrame *out)
+static void maskedmerge8(const uint8_t *bsrc, const uint8_t *osrc,
+                         const uint8_t *msrc, uint8_t *dst,
+                         ptrdiff_t blinesize, ptrdiff_t olinesize,
+                         ptrdiff_t mlinesize, ptrdiff_t dlinesize,
+                         int w, int h,
+                         int half, int shift)
 {
-    int p, x, y;
+    int x, y;
 
-    for (p = 0; p < s->nb_planes; p++) {
-        const uint8_t *bsrc = base->data[p];
-        const uint8_t *osrc = overlay->data[p];
-        const uint8_t *msrc = mask->data[p];
-        uint8_t *dst = out->data[p];
-
-        if (!((1 << p) & s->planes)) {
-            av_image_copy_plane(dst, out->linesize[p], bsrc, base->linesize[p],
-                                s->width[p], s->height[p]);
-            continue;
+    for (y = 0; y < h; y++) {
+        for (x = 0; x < w; x++) {
+            dst[x] = bsrc[x] + ((msrc[x] * (osrc[x] - bsrc[x]) + 128) >> 8);
         }
 
-        for (y = 0; y < s->height[p]; y++) {
-            for (x = 0; x < s->width[p]; x++) {
-                dst[x] = ((256 - msrc[x]) * bsrc[x] + msrc[x] * osrc[x] + 128) >> 8;
-            }
-
-            dst  += out->linesize[p];
-            bsrc += base->linesize[p];
-            osrc += overlay->linesize[p];
-            msrc += mask->linesize[p];
-        }
+        dst  += dlinesize;
+        bsrc += blinesize;
+        osrc += olinesize;
+        msrc += mlinesize;
     }
 }
 
-static void maskedmerge16(MaskedMergeContext *s, const AVFrame *base,
-                          const AVFrame *overlay, const AVFrame *mask, AVFrame *out)
+static void maskedmerge16(const uint8_t *bbsrc, const uint8_t *oosrc,
+                          const uint8_t *mmsrc, uint8_t *ddst,
+                          ptrdiff_t blinesize, ptrdiff_t olinesize,
+                          ptrdiff_t mlinesize, ptrdiff_t dlinesize,
+                          int w, int h,
+                          int half, int shift)
 {
-    const int max = s->max;
-    const int half = s->half;
-    const int shift = s->depth;
-    int p, x, y;
+    const uint16_t *bsrc = (const uint16_t *)bbsrc;
+    const uint16_t *osrc = (const uint16_t *)oosrc;
+    const uint16_t *msrc = (const uint16_t *)mmsrc;
+    uint16_t *dst = (uint16_t *)ddst;
+    int x, y;
 
-    for (p = 0; p < s->nb_planes; p++) {
-        const uint16_t *bsrc = (const uint16_t *)base->data[p];
-        const uint16_t *osrc = (const uint16_t *)overlay->data[p];
-        const uint16_t *msrc = (const uint16_t *)mask->data[p];
-        uint16_t *dst = (uint16_t *)out->data[p];
-
-        if (!((1 << p) & s->planes)) {
-            av_image_copy_plane(out->data[p], out->linesize[p], base->data[p], base->linesize[p],
-                                s->width[p], s->height[p]);
-            continue;
+    for (y = 0; y < h; y++) {
+        for (x = 0; x < w; x++) {
+            dst[x] = bsrc[x] + ((msrc[x] * (osrc[x] - bsrc[x]) + half) >> shift);
         }
 
-        for (y = 0; y < s->height[p]; y++) {
-            for (x = 0; x < s->width[p]; x++) {
-                dst[x] = ((max - msrc[x]) * bsrc[x] + msrc[x] * osrc[x] + half) >> shift;
-            }
-
-            dst  += out->linesize[p]     / 2;
-            bsrc += base->linesize[p]    / 2;
-            osrc += overlay->linesize[p] / 2;
-            msrc += mask->linesize[p]    / 2;
-        }
+        dst  += dlinesize / 2;
+        bsrc += blinesize / 2;
+        osrc += olinesize / 2;
+        msrc += mlinesize / 2;
     }
 }
 
@@ -184,13 +170,15 @@ static int config_input(AVFilterLink *inlink)
     s->width[0]  = s->width[3]  = inlink->w;
 
     s->depth = desc->comp[0].depth;
-    s->max = 1 << s->depth;
-    s->half = s->max / 2;
+    s->half = (1 << s->depth) / 2;
 
     if (desc->comp[0].depth == 8)
         s->maskedmerge = maskedmerge8;
     else
         s->maskedmerge = maskedmerge16;
+
+    if (ARCH_X86)
+        ff_maskedmerge_init_x86(s);
 
     return 0;
 }

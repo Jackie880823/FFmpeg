@@ -1217,6 +1217,7 @@ exit_loop:
         }
     }
     ff_thread_report_progress(&s->picture, INT_MAX, 0);
+    ff_thread_report_progress(&s->previous_picture, INT_MAX, 0);
 
     av_frame_set_metadata(p, metadata);
     metadata   = NULL;
@@ -1225,6 +1226,7 @@ exit_loop:
 fail:
     av_dict_free(&metadata);
     ff_thread_report_progress(&s->picture, INT_MAX, 0);
+    ff_thread_report_progress(&s->previous_picture, INT_MAX, 0);
     return ret;
 }
 
@@ -1338,6 +1340,7 @@ end:
 }
 #endif
 
+#if HAVE_THREADS
 static int update_thread_context(AVCodecContext *dst, const AVCodecContext *src)
 {
     PNGDecContext *psrc = src->priv_data;
@@ -1385,6 +1388,7 @@ static int update_thread_context(AVCodecContext *dst, const AVCodecContext *src)
 
     return 0;
 }
+#endif
 
 static av_cold int png_dec_init(AVCodecContext *avctx)
 {
