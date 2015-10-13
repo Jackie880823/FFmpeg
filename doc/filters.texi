@@ -1118,7 +1118,7 @@ Number_of_samples
 For example full key look like this @code{lavfi.astats.1.DC_offset} or
 this @code{lavfi.astats.Overall.Peak_count}.
 
-For description what each key means read bellow.
+For description what each key means read below.
 
 @item reset
 Set number of frame after which stats are going to be recalculated.
@@ -2400,7 +2400,7 @@ Amount of milliseconds the signal has to rise above the threshold before gain
 reduction starts. Default is 20. Range is between 0.01 and 2000.
 
 @item release
-Amount of milliseconds the signal has to fall bellow the threshold before
+Amount of milliseconds the signal has to fall below the threshold before
 reduction is decreased again. Default is 250. Range is between 0.01 and 9000.
 
 @item makeup
@@ -4533,7 +4533,7 @@ It accepts the following options:
 @item threshold1
 @item threshold2
 @item threshold3
-Allows to limit the maximum change for each plane, default is 65535.
+Limit the maximum change for each plane, default is 65535.
 If 0, plane will remain unchanged.
 @end table
 
@@ -4590,7 +4590,9 @@ specified.
 
 @item band, t
 Specify the thickness of the fuzzy edge of the rectangle (added to
-@var{w} and @var{h}). The default value is 4.
+@var{w} and @var{h}). The default value is 1. This option is
+deprecated, setting higher values should no longer be necessary and
+is not recommended.
 
 @item show
 When set to 1, a green rectangle is drawn on the screen to simplify
@@ -4736,7 +4738,7 @@ It accepts the following options:
 @item threshold1
 @item threshold2
 @item threshold3
-Allows to limit the maximum change for each plane, default is 65535.
+Limit the maximum change for each plane, default is 65535.
 If 0, plane will remain unchanged.
 
 @item coordinates
@@ -5396,14 +5398,20 @@ A 1 character description of the current picture type.
 
 @item pts
 The timestamp of the current frame.
-It can take up to two arguments.
+It can take up to three arguments.
 
 The first argument is the format of the timestamp; it defaults to @code{flt}
 for seconds as a decimal number with microsecond accuracy; @code{hms} stands
 for a formatted @var{[-]HH:MM:SS.mmm} timestamp with millisecond accuracy.
+@code{gmtime} stands for the timestamp of the frame formatted as UTC time;
+@code{localtime} stands for the timestamp of the frame formatted as
+local time zone time.
 
 The second argument is an offset added to the timestamp.
 
+If the format is set to @code{localtime} or @code{gmtime},
+a third argument may be supplied: a strftime() format string.
+By default, @var{YYYY-MM-DD HH:MM:SS} format will be used.
 @end table
 
 @subsection Examples
@@ -5673,7 +5681,7 @@ It accepts the following options:
 @item threshold1
 @item threshold2
 @item threshold3
-Allows to limit the maximum change for each plane, default is 65535.
+Limit the maximum change for each plane, default is 65535.
 If 0, plane will remain unchanged.
 
 @item coordinates
@@ -7120,7 +7128,7 @@ to create same output.
 The filter accept the following option:
 
 @table @option
-@item nb_inputs
+@item inputs
 Set number of input streams. Default is 2.
 @end table
 
@@ -7367,7 +7375,7 @@ It accepts the following options:
 @item threshold1
 @item threshold2
 @item threshold3
-Allows to limit the maximum change for each plane, default is 65535.
+Limit the maximum change for each plane, default is 65535.
 If 0, plane will remain unchanged.
 @end table
 
@@ -10403,7 +10411,7 @@ stereo3d=sbsl:aybd
 @end example
 
 @item
-Convert input video from above bellow (left eye above, right eye below) to side by side crosseye.
+Convert input video from above below (left eye above, right eye below) to side by side crosseye.
 @example
 stereo3d=abl:sbsr
 @end example
@@ -11542,7 +11550,7 @@ to create same output.
 The filter accept the following option:
 
 @table @option
-@item nb_inputs
+@item inputs
 Set number of input streams. Default is 2.
 @end table
 
@@ -13032,6 +13040,73 @@ choice.
 Send even and odd frames to separate outputs, and compose them:
 @example
 select=n=2:e='mod(n, 2)+1' [odd][even]; [odd] pad=h=2*ih [tmp]; [tmp][even] overlay=y=h
+@end example
+@end itemize
+
+@section selectivecolor
+
+Adjust cyan, magenta, yellow and black (CMYK) to certain ranges of colors (such
+as "reds", "yellows", "greens", "cyans", ...). The adjustment range is defined
+by the "purity" of the color (that is, how saturated it already is).
+
+This filter is similar to the Adobe Photoshop Selective Color tool.
+
+The filter accepts the following options:
+
+@table @option
+@item correction_method
+Select color correction method.
+
+Available values are:
+@table @samp
+@item absolute
+Specified adjustments are applied "as-is" (added/subtracted to original pixel
+component value).
+@item relative
+Specified adjustments are relative to the original component value.
+@end table
+Default is @code{absolute}.
+@item reds
+Adjustments for red pixels (pixels where the red component is the maximum)
+@item yellows
+Adjustments for yellow pixels (pixels where the blue component is the minimum)
+@item greens
+Adjustments for green pixels (pixels where the green component is the maximum)
+@item cyans
+Adjustments for cyan pixels (pixels where the red component is the minimum)
+@item blues
+Adjustments for blue pixels (pixels where the blue component is the maximum)
+@item magentas
+Adjustments for magenta pixels (pixels where the green component is the minimum)
+@item whites
+Adjustments for white pixels (pixels where all components are greater than 128)
+@item neutrals
+Adjustments for all pixels except pure black and pure white
+@item blacks
+Adjustments for black pixels (pixels where all components are lesser than 128)
+@item psfile
+Specify a Photoshop selective color file (@code{.asv}) to import the settings from.
+@end table
+
+All the adjustment settings (@option{reds}, @option{yellows}, ...) accept up to
+4 space separated floating point adjustment values in the [-1,1] range,
+respectively to adjust the amount of cyan, magenta, yellow and black for the
+pixels of its range.
+
+@subsection Examples
+
+@itemize
+@item
+Increase cyan by 55% and reduce yellow by 33% in every green areas, and
+increase magenta by 27% in blue areas:
+@example
+selectivecolor=greens=.5 0 -.33 0:blues=0 .27
+@end example
+
+@item
+Use a Photoshop selective color preset:
+@example
+selectivecolor=psfile=MySelectiveColorPresets/Misty.asv
 @end example
 @end itemize
 

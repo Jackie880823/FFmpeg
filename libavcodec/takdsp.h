@@ -1,8 +1,4 @@
 /*
- * Header file for hardcoded AAC SBR windows
- *
- * Copyright (c) 2014 Reimar Döffinger <Reimar.Doeffinger@gmx.de>
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -20,22 +16,19 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <stdlib.h>
-#include "libavutil/common.h"
-#include "cabac_functions.h"
-#undef CONFIG_HARDCODED_TABLES
-#define CONFIG_HARDCODED_TABLES 0
-av_const int av_log2(unsigned v) { int r = 0; while (v >>= 1) r++; return r; }
-#include "cabac_tablegen.h"
-#include "tableprint.h"
+#ifndef AVCODEC_TAKDSP_H
+#define AVCODEC_TAKDSP_H
 
-int main(void)
-{
-    cabac_tableinit();
+#include <stdint.h>
 
-    write_fileheader();
+typedef struct TAKDSPContext {
+    void (*decorrelate_ls)(int32_t *p1, int32_t *p2, int length);
+    void (*decorrelate_sr)(int32_t *p1, int32_t *p2, int length);
+    void (*decorrelate_sm)(int32_t *p1, int32_t *p2, int length);
+    void (*decorrelate_sf)(int32_t *p1, int32_t *p2, int length, int dshift, int dfactor);
+} TAKDSPContext;
 
-    WRITE_ARRAY("const", uint8_t, ff_h264_cabac_tables);
+void ff_takdsp_init(TAKDSPContext *c);
+void ff_takdsp_init_x86(TAKDSPContext *c);
 
-    return 0;
-}
+#endif /* AVCODEC_TAKDSP_H */

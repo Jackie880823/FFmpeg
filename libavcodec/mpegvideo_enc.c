@@ -148,7 +148,7 @@ void ff_convert_matrix(MpegEncContext *s, int (*qmat)[64],
                     qmat16[qscale][0][i] == 128 * 256)
                     qmat16[qscale][0][i] = 128 * 256 - 1;
                 qmat16[qscale][1][i] =
-                    ROUNDED_DIV(bias << (16 - QUANT_BIAS_SHIFT),
+                    ROUNDED_DIV(bias * (1<<(16 - QUANT_BIAS_SHIFT)),
                                 qmat16[qscale][0][i]);
             }
         }
@@ -4555,8 +4555,8 @@ STOP_TIMER("iterative search")
  *                  permutation up, the block is not (inverse) permutated
  *                  to scantable order!
  */
-static void block_permute(int16_t *block, uint8_t *permutation,
-                          const uint8_t *scantable, int last)
+void ff_block_permute(int16_t *block, uint8_t *permutation,
+                      const uint8_t *scantable, int last)
 {
     int i;
     int16_t temp[64];
@@ -4655,7 +4655,7 @@ int ff_dct_quantize_c(MpegEncContext *s,
 
     /* we need this permutation so that we correct the IDCT, we only permute the !=0 elements */
     if (s->idsp.perm_type != FF_IDCT_PERM_NONE)
-        block_permute(block, s->idsp.idct_permutation,
+        ff_block_permute(block, s->idsp.idct_permutation,
                       scantable, last_non_zero);
 
     return last_non_zero;

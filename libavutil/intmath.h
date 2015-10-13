@@ -114,11 +114,20 @@ static av_always_inline av_const int ff_log2_16bit_c(unsigned int v)
 #ifndef ff_ctz
 #define ff_ctz(v) __builtin_ctz(v)
 #endif
+#ifndef ff_ctzll
+#define ff_ctzll(v) __builtin_ctzll(v)
+#endif
 #endif
 #endif
 
 #ifndef ff_ctz
 #define ff_ctz ff_ctz_c
+/**
+ * Trailing zero bit count.
+ *
+ * @param v  input value. If v is 0, the result is undefined.
+ * @return   the number of trailing 0-bits
+ */
 #if !defined( _MSC_VER )
 static av_always_inline av_const int ff_ctz_c(int v)
 {
@@ -158,13 +167,21 @@ static av_always_inline av_const int ff_ctz_c( int v )
 #endif
 #endif
 
-/**
- * Trailing zero bit count.
- *
- * @param v  input value. If v is 0, the result is undefined.
- * @return   the number of trailing 0-bits
- */
-int av_ctz(int v);
+#ifndef ff_ctzll
+#define ff_ctzll ff_ctzll_c
+/* We use the De-Bruijn method outlined in:
+ * http://supertech.csail.mit.edu/papers/debruijn.pdf. */
+static av_always_inline av_const int ff_ctzll_c(long long v)
+{
+    static const uint8_t debruijn_ctz64[64] = {
+        0, 1, 2, 53, 3, 7, 54, 27, 4, 38, 41, 8, 34, 55, 48, 28,
+        62, 5, 39, 46, 44, 42, 22, 9, 24, 35, 59, 56, 49, 18, 29, 11,
+        63, 52, 6, 26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
+        51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12
+    };
+    return debruijn_ctz64[(uint64_t)((v & -v) * 0x022FDD63CC95386D) >> 58];
+}
+#endif
 
 /**
  * @}

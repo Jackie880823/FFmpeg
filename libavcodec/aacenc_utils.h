@@ -96,6 +96,55 @@ static inline int find_min_book(float maxval, int sf)
     return cb;
 }
 
+static inline float find_form_factor(int group_len, int swb_size, float thresh,
+                                     const float *scaled, float nzslope) {
+    const float iswb_size = 1.0f / swb_size;
+    const float iswb_sizem1 = 1.0f / (swb_size - 1);
+    const float ethresh = thresh;
+    float form = 0.0f, weight = 0.0f;
+    int w2, i;
+    for (w2 = 0; w2 < group_len; w2++) {
+        float e = 0.0f, e2 = 0.0f, var = 0.0f, maxval = 0.0f;
+        float nzl = 0;
+        for (i = 0; i < swb_size; i++) {
+            float s = fabsf(scaled[w2*128+i]);
+            maxval = FFMAX(maxval, s);
+            e += s;
+            e2 += s *= s;
+            /* We really don't want a hard non-zero-line count, since
+             * even below-threshold lines do add up towards band spectral power.
+             * So, fall steeply towards zero, but smoothly
+             */
+            if (s >= ethresh) {
+                nzl += 1.0f;
+            } else {
+                nzl += powf(s / ethresh, nzslope);
+            }
+        }
+        if (e2 > thresh) {
+            float frm;
+            e *= iswb_size;
+
+            /** compute variance */
+            for (i = 0; i < swb_size; i++) {
+                float d = fabsf(scaled[w2*128+i]) - e;
+                var += d*d;
+            }
+            var = sqrtf(var * iswb_sizem1);
+
+            e2 *= iswb_size;
+            frm = e / FFMIN(e+4*var,maxval);
+            form += e2 * sqrtf(frm) / FFMAX(0.5f,nzl);
+            weight += e2;
+        }
+    }
+    if (weight > 0) {
+        return form / weight;
+    } else {
+        return 1.0f;
+    }
+}
+
 /** Return the minimum scalefactor where the quantized coef does not clip. */
 static inline uint8_t coef2minsf(float coef)
 {
@@ -125,6 +174,14 @@ static inline int quant_array_idx(const float val, const float *arr, const int n
     return index;
 }
 
+/**
+ * approximates exp10f(-3.0f*(0.5f + 0.5f * cosf(FFMIN(b,15.5f) / 15.5f)))
+ */
+static av_always_inline float bval2bmax(float b)
+{
+    return 0.001f + 0.0035f * (b*b*b) / (15.5f*15.5f*15.5f);
+}
+
 /*
  * linear congruential pseudorandom number generator, copied from the decoder
  */
@@ -145,5 +202,43 @@ static inline int lcg_random(unsigned previous_val)
         av_log(avctx, AV_LOG_WARNING, __VA_ARGS__); \
     }
 
+#define AAC_OPT_SET(e_opt, p_opt, bypass, name)                                \
+    ERROR_IF ((e_opt)->name == 1 && (p_opt)->name == OPT_BANNED,               \
+              "Profile %i does not allow %s\n", avctx->profile, #name);        \
+    ERROR_IF ((e_opt)->name == 0 && (p_opt)->name == OPT_REQUIRED,             \
+             "Option %s is a requirement for this profile (%i)\n",             \
+              #name, avctx->profile);                                          \
+    if ((e_opt)->name == 1 && (p_opt)->name == OPT_NEEDS_MAIN &&               \
+        avctx->profile == FF_PROFILE_AAC_LOW) {                                \
+        WARN_IF(1, "Profile %i does not allow for %s, setting profile to "     \
+                "\"aac_main\"(%i)\n", avctx->profile, #name,                   \
+                FF_PROFILE_AAC_MAIN);                                          \
+        avctx->profile = FF_PROFILE_AAC_MAIN;                                  \
+        p_opt = &aacenc_profiles[FF_PROFILE_AAC_MAIN].opts;                    \
+    }                                                                          \
+    if ((e_opt)->name == 1 && (p_opt)->name == OPT_NEEDS_LTP &&                \
+        avctx->profile == FF_PROFILE_AAC_LOW) {                                \
+        WARN_IF(1, "Profile %i does not allow for %s, setting profile to "     \
+                "\"aac_ltp\"(%i)\n", avctx->profile, #name,                    \
+                FF_PROFILE_AAC_LTP);                                           \
+        avctx->profile = FF_PROFILE_AAC_LTP;                                   \
+        p_opt = &aacenc_profiles[FF_PROFILE_AAC_LTP].opts;                     \
+    }                                                                          \
+    if ((e_opt)->name == OPT_AUTO) {                                           \
+        if ((p_opt)->name == OPT_BANNED) {                                     \
+            (e_opt)->name = 0;                                                 \
+        } else if ((p_opt)->name == OPT_NEEDS_LTP) {                           \
+            (e_opt)->name = 0;                                                 \
+        } else if ((p_opt)->name == OPT_NEEDS_MAIN) {                          \
+            (e_opt)->name = 0;                                                 \
+        } else if ((p_opt)->name == OPT_REQUIRED) {                            \
+            (e_opt)->name = 1;                                                 \
+        } else if (bypass) {                                                   \
+            (e_opt)->name = (e_opt)->name;                                     \
+        } else {                                                               \
+            (e_opt)->name = (p_opt)->name;                                     \
+        }                                                                      \
+    }                                                                          \
+    av_log(avctx, AV_LOG_VERBOSE, "Option %s set to %i\n", #name, (e_opt)->name);
 
 #endif /* AVCODEC_AACENC_UTILS_H */

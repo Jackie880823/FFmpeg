@@ -1,6 +1,7 @@
 /android
 *.a
 *.o
+*.o.*
 *.d
 *.def
 *.dll
