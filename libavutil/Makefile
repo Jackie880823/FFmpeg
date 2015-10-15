@@ -30,9 +30,11 @@ HEADERS = adler32.h                                                     \
           hash.h                                                        \
           hmac.h                                                        \
           imgutils.h                                                    \
+          internal.h                                                    \
           intfloat.h                                                    \
           intreadwrite.h                                                \
           lfg.h                                                         \
+          libm.h                                                        \
           log.h                                                         \
           macros.h                                                      \
           mathematics.h                                                 \
@@ -56,6 +58,8 @@ HEADERS = adler32.h                                                     \
           stereo3d.h                                                    \
           threadmessage.h                                               \
           time.h                                                        \
+          timer.h                                                       \
+          time_internal.h                                               \
           timecode.h                                                    \
           timestamp.h                                                   \
           twofish.h                                                     \

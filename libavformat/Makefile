@@ -4,6 +4,10 @@ NAME = avformat
 
 HEADERS = avformat.h                                                    \
           avio.h                                                        \
+          ffm.h                                                         \
+          network.h                                                     \
+          os_support.h                                                  \
+          url.h                                                         \
           version.h                                                     \
 
 OBJS = allformats.o         \
