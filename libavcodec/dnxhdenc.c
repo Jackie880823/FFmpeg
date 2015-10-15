@@ -163,9 +163,9 @@ static av_cold int dnxhd_init_vlc(DNXHDEncContext *ctx)
                 alevel -= offset << 6;
             }
             for (j = 0; j < 257; j++) {
-                if (ctx->cid_table->ac_level[j] >> 1 == alevel &&
-                    (!offset || (ctx->cid_table->ac_flags[j] & 1) && offset) &&
-                    (!run    || (ctx->cid_table->ac_flags[j] & 2) && run)) {
+                if (ctx->cid_table->ac_info[2*j+0] >> 1 == alevel &&
+                    (!offset || (ctx->cid_table->ac_info[2*j+1] & 1) && offset) &&
+                    (!run    || (ctx->cid_table->ac_info[2*j+1] & 2) && run)) {
                     av_assert1(!ctx->vlc_codes[index]);
                     if (alevel) {
                         ctx->vlc_codes[index] =
@@ -776,11 +776,13 @@ static int dnxhd_mb_var_thread(AVCodecContext *avctx, void *arg,
             unsigned mb  = mb_y * ctx->m.mb_width + mb_x;
             int sum = 0;
             int sqsum = 0;
+            int bw = FFMIN(avctx->width - 16 * mb_x, 16);
+            int bh = FFMIN((avctx->height >> ctx->interlaced) - 16 * mb_y, 16);
             int mean, sqmean;
             int i, j;
             // Macroblocks are 16x16 pixels, unlike DCT blocks which are 8x8.
-            for (i = 0; i < 16; ++i) {
-                for (j = 0; j < 16; ++j) {
+            for (i = 0; i < bh; ++i) {
+                for (j = 0; j < bw; ++j) {
                     // Turn 16-bit pixels into 10-bit ones.
                     int const sample = (unsigned) pix[j] >> 6;
                     sum   += sample;
