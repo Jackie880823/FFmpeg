@@ -39,6 +39,11 @@
 #include <windows.h>
 #include <process.h>
 
+/* MinGW requires the intrinsics header for the pthread_once fallback code */
+#if _WIN32_WINNT < 0x0600 && defined(__MINGW32__)
+#include <intrin.h>
+#endif
+
 #include "libavutil/attributes.h"
 #include "libavutil/common.h"
 #include "libavutil/internal.h"
@@ -82,8 +87,13 @@ static av_unused int pthread_create(pthread_t *thread, const void *unused_attr,
 {
     thread->func   = start_routine;
     thread->arg    = arg;
+#if HAVE_WINRT
+    thread->handle = (void*)CreateThread(NULL, 0, win32thread_worker, thread,
+                                           0, NULL);
+#else
     thread->handle = (void*)_beginthreadex(NULL, 0, win32thread_worker, thread,
                                            0, NULL);
+#endif
     return !thread->handle;
 }
 
