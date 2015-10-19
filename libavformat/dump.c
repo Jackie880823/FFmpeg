@@ -440,14 +440,14 @@ static void dump_stream_format(AVFormatContext *ic, int i,
         if (fps || tbr || tbn || tbc)
             av_log(NULL, AV_LOG_INFO, "%s", separator);
 
-        if (fps)
-            print_fps(av_q2d(st->avg_frame_rate), tbr || tbn || tbc ? "fps, " : "fps");
-        if (tbr)
-            print_fps(av_q2d(st->r_frame_rate), tbn || tbc ? "tbr, " : "tbr");
-        if (tbn)
-            print_fps(1 / av_q2d(st->time_base), tbc ? "tbn, " : "tbn");
-        if (tbc)
-            print_fps(1 / av_q2d(st->codec->time_base), "tbc");
+//        if (fps)
+//            print_fps(av_q2d(st->avg_frame_rate), tbr || tbn || tbc ? "fps, " : "fps");
+//        if (tbr)
+//            print_fps(av_q2d(st->r_frame_rate), tbn || tbc ? "tbr, " : "tbr");
+//        if (tbn)
+//            print_fps(1 / av_q2d(st->time_base), tbc ? "tbn, " : "tbn");
+//        if (tbc)
+//            print_fps(1 / av_q2d(st->codec->time_base), "tbc");
     }
 
     if (st->disposition & AV_DISPOSITION_DEFAULT)

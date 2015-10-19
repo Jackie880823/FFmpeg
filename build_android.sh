@@ -1,7 +1,46 @@
 #!/bin/bash
-NDK=${ANDROID_NDK}
-SYSROOT=$NDK/platforms/android-16/arch-arm/
-TOOLCHAIN=$NDK/toolchains/arm-linux-androideabi-4.9/prebuilt/darwin-x86_64
+NDK_BASE=${ANDROID_NDK}
+
+
+# Android now has 64-bit and 32-bit versions of the NDK for GNU/Linux.  We
+# assume that the build platform uses the appropriate version, otherwise the
+# user building this will have to manually set NDK_PROCESSOR or NDK_TOOLCHAIN.
+if [ $(uname -m) = "x86_64" ]; then
+    NDK_PROCESSOR=x86_64
+else
+    NDK_PROCESSOR=x86
+fi
+
+# Android NDK setup
+NDK_PLATFORM_LEVEL=16
+# arm or x86
+NDK_ABI=x86
+NDK_COMPILER_VERSION=4.9
+NDK_UNAME=`uname -s | tr '[A-Z]' '[a-z]'`
+if [ $NDK_ABI = "x86" ]; then
+    ARCH=i686
+    HOST=$ARCH-linux-android
+    NDK_TOOLCHAIN=$NDK_ABI-$NDK_COMPILER_VERSION
+    ADDI_CFLAGS="-march=$ARCH"
+#elif [ $NDK_ABI = "mips" ]; then
+#    ARCH=${NDK_ABI}el
+#    HOST=${ARCH}-linux-android
+#    NDK_TOOLCHAIN=$HOST-$NDK_COMPILER_VERSION
+#    ADDI_CFLAGS="-march=$ARCH"
+else
+    ARCH=$NDK_ABI
+    HOST=$NDK_ABI-linux-androideabi
+    NDK_TOOLCHAIN=$HOST-$NDK_COMPILER_VERSION
+    ADDI_CFLAGS="-m$ARCH"
+fi
+
+
+NDK_SYSROOT=$NDK_BASE/platforms/android-$NDK_PLATFORM_LEVEL/arch-$NDK_ABI/
+NDK_TOOLCHAIN_BASE=$NDK_BASE/toolchains/$NDK_TOOLCHAIN/prebuilt/$NDK_UNAME-$NDK_PROCESSOR
+# NDK_SYSROOT=$NDK_BASE/platforms/android-16/arch-arm/
+# NDK_TOOLCHAIN_BASE=$NDK_BASE/toolchains/arm-linux-androideabi-4.9/prebuilt/darwin-x86_64
+echo $NDK_SYSROOT
+echo $NDK_TOOLCHAIN_BASE
 function build_one
 {
 ./configure \
@@ -17,12 +56,12 @@ function build_one
     --disable-ffplay \
     --disable-ffserver \
     --disable-debug \
-    --cross-prefix=$TOOLCHAIN/bin/arm-linux-androideabi- \
+    --cross-prefix=$NDK_TOOLCHAIN_BASE/bin/$HOST- \
     --target-os=linux \
-    --arch=arm \
+    --arch=$ARCH \
     --enable-cross-compile \
     --enable-runtime-cpudetect \
-    --sysroot=$SYSROOT \
+    --sysroot=$NDK_SYSROOT \
     --extra-cflags="-Os -fpic $ADDI_CFLAGS" \
     --extra-ldflags="$ADDI_LDFLAGS" \
     $ADDITIONAL_CONFIGURE_FLAG
@@ -30,7 +69,9 @@ make clean
 make
 make install
 }
-CPU=arm
+CPU=$NDK_ABI
 PREFIX=$(pwd)/android/$CPU
 ADDI_CFLAGS="-marm"
 build_one
+#cd ../app/src/main
+#./build.sh
