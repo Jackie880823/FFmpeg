@@ -1,3 +1,3 @@
 #!/bin/bash
 echo copy HEADS FILE
-cp $1 android/arm/include/$1
+cp $2 android/$1/include/$2

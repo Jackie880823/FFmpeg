@@ -14,7 +14,7 @@ fi
 # Android NDK setup
 NDK_PLATFORM_LEVEL=16
 # arm or x86
-NDK_ABI=x86
+NDK_ABI=arm
 NDK_COMPILER_VERSION=4.9
 NDK_UNAME=`uname -s | tr '[A-Z]' '[a-z]'`
 if [ $NDK_ABI = "x86" ]; then
@@ -71,7 +71,6 @@ make install
 }
 CPU=$NDK_ABI
 PREFIX=$(pwd)/android/$CPU
-ADDI_CFLAGS="-marm"
 build_one
 #cd ../app/src/main
 #./build.sh
